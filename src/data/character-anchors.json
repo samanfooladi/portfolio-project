@@ -1,0 +1,66 @@
+{
+  "esmaeel": {
+    "fullHeadCenterX": 0.4299,
+    "fullHeadSpanX": 0.418,
+    "closeupHeadCenterX": 0.4111,
+    "closeupHeadSpanX": 0.4102,
+    "fullAspect": 0.3472,
+    "closeupAspect": 0.6779
+  },
+  "foxy": {
+    "fullHeadCenterX": 0.4374,
+    "fullHeadSpanX": 0.4429,
+    "closeupHeadCenterX": 0.4407,
+    "closeupHeadSpanX": 0.4146,
+    "fullAspect": 0.3463,
+    "closeupAspect": 0.6667
+  },
+  "mh": {
+    "fullHeadCenterX": 0.4533,
+    "fullHeadSpanX": 0.4531,
+    "closeupHeadCenterX": 0.4267,
+    "closeupHeadSpanX": 0.4238,
+    "fullAspect": 0.3669,
+    "closeupAspect": 0.8479
+  },
+  "navid": {
+    "fullHeadCenterX": 0.4079,
+    "fullHeadSpanX": 0.4038,
+    "closeupHeadCenterX": 0.4073,
+    "closeupHeadSpanX": 0.4004,
+    "fullAspect": 0.3038,
+    "closeupAspect": 0.7833
+  },
+  "peyman": {
+    "fullHeadCenterX": 0.5384,
+    "fullHeadSpanX": 0.5425,
+    "closeupHeadCenterX": 0.572,
+    "closeupHeadSpanX": 0.5635,
+    "fullAspect": 0.3197,
+    "closeupAspect": 0.9571
+  },
+  "reina": {
+    "fullHeadCenterX": 0.4729,
+    "fullHeadSpanX": 0.4727,
+    "closeupHeadCenterX": 0.475,
+    "closeupHeadSpanX": 0.4741,
+    "fullAspect": 0.3841,
+    "closeupAspect": 0.96
+  },
+  "sam": {
+    "fullHeadCenterX": 0.5375,
+    "fullHeadSpanX": 0.542,
+    "closeupHeadCenterX": 0.569,
+    "closeupHeadSpanX": 0.562,
+    "fullAspect": 0.4297,
+    "closeupAspect": 1.0004
+  },
+  "soroush": {
+    "fullHeadCenterX": 0.395,
+    "fullHeadSpanX": 0.3936,
+    "closeupHeadCenterX": 0.3959,
+    "closeupHeadSpanX": 0.3882,
+    "fullAspect": 0.6419,
+    "closeupAspect": 0.8646
+  }
+}
