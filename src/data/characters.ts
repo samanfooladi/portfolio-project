@@ -25,6 +25,16 @@ export type Character = {
   offsetY?: number;
   /** Multiplies FULL_HEIGHT_VH for this character only. 1 = the shared scale. */
   scaleAdjust?: number;
+
+  /**
+   * Nudges the head box `npm run images` measures for the mobile picker avatar.
+   * All three are fractions of the box's own side, so they keep meaning if the
+   * art is re-measured. They move the CROP, not the character: `dx: 0.02` slides
+   * the window right, which moves the head left inside the circle; `scale: 1.1`
+   * widens the window, which makes the head smaller and gives hair, ears and
+   * spikes room to stay inside.
+   */
+  headBoxAdjust?: { dx?: number; dy?: number; scale?: number };
 };
 
 export const CHARACTERS: Character[] = [
@@ -35,6 +45,8 @@ export const CHARACTERS: Character[] = [
     accentSecondary: "#1FA3B5",
     bgFocusX: 50,
     bgFocusY: 50,
+    // Head leans left of the hair line the anchor is measured from.
+    headBoxAdjust: { dx: 0.02 },
   },
   {
     id: "foxy",
@@ -42,6 +54,9 @@ export const CHARACTERS: Character[] = [
     accent: "#FF9A1F",
     bgFocusX: 50,
     bgFocusY: 50,
+    // Ears already set the box width; this only drops it enough to sit them off
+    // the top of the circle.
+    headBoxAdjust: { dy: 0.015 },
   },
   {
     id: "mh",
@@ -57,6 +72,8 @@ export const CHARACTERS: Character[] = [
     accentSecondary: "#F08A24",
     bgFocusX: 50,
     bgFocusY: 50,
+    // Tall hair, and a head that sits right of its crown.
+    headBoxAdjust: { dx: 0.025, scale: 1.08 },
   },
   {
     id: "peyman",
@@ -78,6 +95,8 @@ export const CHARACTERS: Character[] = [
     accent: "#2F7BFF",
     bgFocusX: 50,
     bgFocusY: 50,
+    // Spikes reach past the measured head on every side.
+    headBoxAdjust: { scale: 1.12 },
   },
   {
     id: "soroush",
@@ -85,6 +104,8 @@ export const CHARACTERS: Character[] = [
     accent: "#3FD6E8",
     bgFocusX: 50,
     bgFocusY: 50,
+    // Curls sit wider than the longest opaque run in any single row.
+    headBoxAdjust: { dx: 0.02, scale: 1.06 },
   },
 ];
 
@@ -109,13 +130,83 @@ export const FRAMING = {
   closeupHeightVh: 92,
 } as const;
 
+/**
+ * The mobile screen. It shares the roster and the measured anchors with the
+ * strips and nothing else: one character owns the screen, the rest are a row of
+ * circles, and none of the strip geometry above applies.
+ *
+ * The asset usage is inverted. The strips show Full views and the selected
+ * state shows a close-up; here the selected character IS the Full view, and the
+ * close-up only survives as the square head crop behind each circle.
+ */
+export const MOBILE = {
+  /** Rendered height of the selected character's Full view, in vh. */
+  fullHeightVh: 88,
+  /**
+   * Empty space that must remain above it. The Full views are trimmed to their
+   * opaque box, so their top edge is the top of the hair; this caps the height
+   * rather than moving the figure, so the head can never reach the top edge.
+   */
+  headClearanceVh: 10,
+  /** Circle diameter. The lower bound is a tap target, which is why the row
+      scrolls instead of shrinking past it. */
+  circle: { minPx: 44, vw: 13, maxPx: 64 },
+  /** Gap between circles, in px. */
+  gapPx: 12,
+
+  /** How the character arrives: a short rise, and on a switch a slight
+      over-scale that settles. Rises are in px, not vh -- this is a nudge, not a
+      layout value. */
+  entrance: { introRise: 30, switchRise: 40, switchScale: 1.03 },
+
+  /** A tapped circle bursts: the disc blows up as it fades, and a thin accent
+      ring carries on outward past where the disc was. */
+  pop: { disc: 1.35, ring: 1.9, ringAlpha: 0.9 },
+
+  duration: {
+    intro: {
+      bg: 0.7,
+      full: 0.8,
+      /** The character starts while the bg is still arriving, not after it. */
+      fullAt: 0.45,
+      circles: 0.7,
+      circlesAt: 0.75,
+      stagger: 0.06,
+      name: 0.8,
+      nameAt: 1.5,
+      /** Longest the opening will sit on black waiting for the art. Past this
+          it starts anyway and the wallpaper fades in as it arrives, which is
+          better than a phone on a slow connection showing nothing at all. */
+      wait: 2,
+    },
+    switch: {
+      pop: 0.25,
+      ring: 0.45,
+      /** The row closing the popped slot and opening one for the returning
+          character. */
+      reflow: 0.5,
+      stagger: 0.03,
+      /** Backgrounds crossfading, and the outgoing character leaving with them. */
+      fade: 0.5,
+      nameOut: 0.45,
+      /** Beat between the backgrounds settling and the new character arriving.
+          The screen is the new wallpaper alone for this whole second. */
+      hold: 1,
+      full: 0.8,
+      /** Beat between the character starting to arrive and the name rising. */
+      nameGap: 0.65,
+      name: 0.7,
+    },
+  },
+} as const;
+
 /** Layout + motion tuning shared by every strip. */
 export const TUNING = {
   /** Angle of the diagonal cuts, measured off vertical. Top edge leans right. */
   cutAngle: 11,
   /** Overlap between neighbouring strips, in px, so no hairline gaps appear. */
   overlap: 1,
-  /** Breakpoint below which strips stack as horizontal bands. */
+  /** Width below which the mobile tree replaces the strips entirely. */
   mobileBreakpoint: 768,
 
   /** bg zoom at rest. Never below 1, or object-fit: cover stops covering. */
@@ -194,6 +285,8 @@ export const assets = {
     `/characters/${id}/full-${h}.${ext}`,
   closeup: (id: string, h: 1400 | 2400, ext: "webp" | "avif" = "webp") =>
     `/characters/${id}/closeup-${h}.${ext}`,
+  /** Square head crop of the close-up, for the mobile picker. WebP only. */
+  avatar: (id: string, s: 256 | 512 = 256) => `/characters/${id}/avatar-${s}.webp`,
 };
 
 /** `#RRGGBB` -> `rgba(r, g, b, a)`, so accent colours can carry an alpha. */

@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "images": "node scripts/build-images.mjs"
+    "images": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/build-images.mjs"
   },
   "dependencies": {
     "@gsap/react": "^2.1.2",

@@ -4,22 +4,40 @@
     "fullHeadSpanX": 0.418,
     "closeupHeadCenterX": 0.4111,
     "closeupHeadSpanX": 0.4102,
+    "headBox": {
+      "x": 0.1825,
+      "y": -0.0108,
+      "w": 0.4763,
+      "h": 0.3229
+    },
     "fullAspect": 0.3472,
     "closeupAspect": 0.6779
   },
   "foxy": {
     "fullHeadCenterX": 0.4374,
     "fullHeadSpanX": 0.4429,
-    "closeupHeadCenterX": 0.4407,
-    "closeupHeadSpanX": 0.4146,
+    "closeupHeadCenterX": 0.478,
+    "closeupHeadSpanX": 0.4479,
+    "headBox": {
+      "x": 0.0842,
+      "y": -0.0108,
+      "w": 0.7875,
+      "h": 0.5443
+    },
     "fullAspect": 0.3463,
-    "closeupAspect": 0.6667
+    "closeupAspect": 0.6919
   },
   "mh": {
     "fullHeadCenterX": 0.4533,
     "fullHeadSpanX": 0.4531,
     "closeupHeadCenterX": 0.4267,
     "closeupHeadSpanX": 0.4238,
+    "headBox": {
+      "x": 0.155,
+      "y": -0.0288,
+      "w": 0.5434,
+      "h": 0.4612
+    },
     "fullAspect": 0.3669,
     "closeupAspect": 0.8479
   },
@@ -28,6 +46,12 @@
     "fullHeadSpanX": 0.4038,
     "closeupHeadCenterX": 0.4073,
     "closeupHeadSpanX": 0.4004,
+    "headBox": {
+      "x": 0.1511,
+      "y": -0.0278,
+      "w": 0.5395,
+      "h": 0.4221
+    },
     "fullAspect": 0.3038,
     "closeupAspect": 0.7833
   },
@@ -36,6 +60,12 @@
     "fullHeadSpanX": 0.5425,
     "closeupHeadCenterX": 0.572,
     "closeupHeadSpanX": 0.5635,
+    "headBox": {
+      "x": 0.317,
+      "y": -0.0228,
+      "w": 0.51,
+      "h": 0.4886
+    },
     "fullAspect": 0.3197,
     "closeupAspect": 0.9571
   },
@@ -44,6 +74,12 @@
     "fullHeadSpanX": 0.4727,
     "closeupHeadCenterX": 0.475,
     "closeupHeadSpanX": 0.4741,
+    "headBox": {
+      "x": 0.2538,
+      "y": -0.0198,
+      "w": 0.4425,
+      "h": 0.4252
+    },
     "fullAspect": 0.3841,
     "closeupAspect": 0.96
   },
@@ -52,6 +88,12 @@
     "fullHeadSpanX": 0.542,
     "closeupHeadCenterX": 0.569,
     "closeupHeadSpanX": 0.562,
+    "headBox": {
+      "x": 0.346,
+      "y": -0.0346,
+      "w": 0.446,
+      "h": 0.446
+    },
     "fullAspect": 0.4297,
     "closeupAspect": 1.0004
   },
@@ -60,6 +102,12 @@
     "fullHeadSpanX": 0.3936,
     "closeupHeadCenterX": 0.3959,
     "closeupHeadSpanX": 0.3882,
+    "headBox": {
+      "x": 0.1503,
+      "y": -0.0304,
+      "w": 0.5116,
+      "h": 0.4424
+    },
     "fullAspect": 0.6419,
     "closeupAspect": 0.8646
   }

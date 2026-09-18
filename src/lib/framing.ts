@@ -1,5 +1,5 @@
 import anchorsJson from "@/data/character-anchors.json";
-import { type Character, FRAMING, TUNING } from "@/data/characters";
+import { type Character, FRAMING, MOBILE, TUNING } from "@/data/characters";
 
 /**
  * Turns the measured anchors into positions for the layers inside a strip.
@@ -10,6 +10,8 @@ import { type Character, FRAMING, TUNING } from "@/data/characters";
  * correct while a strip's width animates on hover.
  */
 
+export type HeadBox = { x: number; y: number; w: number; h: number };
+
 export type Anchors = {
   fullHeadCenterX: number | null;
   fullHeadSpanX?: number | null;
@@ -17,6 +19,13 @@ export type Anchors = {
   closeupHeadCenterX: number | null;
   closeupHeadSpanX?: number | null;
   closeupAspect: number | null;
+  /**
+   * Square head crop inside the close-up, as fractions of it. Square in pixels,
+   * so w and h differ: w is a fraction of the width, h of the height. The
+   * avatar files are already cut to it; it is kept for anything that has to
+   * reason about the crop without loading one.
+   */
+  headBox?: HeadBox | null;
 };
 
 const ANCHORS = anchorsJson as Record<string, Anchors>;
@@ -26,6 +35,7 @@ const EMPTY: Anchors = {
   fullAspect: null,
   closeupHeadCenterX: null,
   closeupAspect: null,
+  headBox: null,
 };
 
 export function anchorsFor(id: string): Anchors {
@@ -127,3 +137,30 @@ export function closeupFramingFor(c: Character): CloseupFraming | null {
 
 /** The shared head line, as a fraction of the viewport height. */
 export const HEAD_TOP_F = FRAMING.headTopVh / 100;
+
+export type MobileFraming = {
+  /** Multipliers of 100dvh. */
+  width: number;
+  height: number;
+  /** Horizontal offset from the centre of the viewport. */
+  dx: number;
+};
+
+/**
+ * Stands a Full view on the bottom edge of the phone screen with its measured
+ * head anchor -- not its centre -- on the middle of the screen.
+ *
+ * Same idea as closeupFramingFor, different layer and a height that is clamped:
+ * the art is trimmed to the top of the hair, so a height the viewport cannot
+ * fit would crop the head rather than the feet.
+ */
+export function mobileFramingFor(c: Character): MobileFraming | null {
+  const a = anchorsFor(c.id);
+  if (a.fullAspect == null || a.fullHeadCenterX == null) return null;
+
+  const wanted = MOBILE.fullHeightVh * (c.scaleAdjust ?? 1);
+  const height = Math.min(wanted, 100 - MOBILE.headClearanceVh) / 100;
+  const width = height * a.fullAspect;
+  // left: calc(50% + dx*100dvh) must put fullHeadCenterX on the viewport centre.
+  return { width, height, dx: -a.fullHeadCenterX * width };
+}

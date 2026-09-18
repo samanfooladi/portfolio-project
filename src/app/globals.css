@@ -343,6 +343,191 @@ body {
 }
 
 /* ---------------------------------------------------------------------------
+   Mobile.
+
+   A separate screen, not narrower strips. One character owns the viewport and
+   everyone else is a circle along the bottom edge, so none of the geometry
+   above applies -- and none of it is even rendered here, the two trees never
+   exist at the same time.
+
+   The asset usage is the inverse of the strips': the selected character is the
+   Full view, and the close-up only survives as the square head crop the build
+   script cuts for the circles.
+--------------------------------------------------------------------------- */
+
+.mobile-root {
+  position: fixed;
+  inset: 0;
+  /* Explicit, though inset already implies it: every layer inside is measured
+     in dvh, and this makes the box those dvh are a fraction of. */
+  height: 100dvh;
+  overflow: hidden;
+  background: #050505;
+}
+
+.mobile-root picture {
+  display: contents;
+}
+
+/* One character's wallpaper, figure and name. Two of these exist so a switch
+   can crossfade between them; the one in front carries z-index 1, set inline,
+   and everything inside a layer is ordered within it. */
+.mobile-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.mobile-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.mobile-bg img {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  object-fit: cover;
+  object-position: var(--bg-fx) var(--bg-fy);
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* The character. Same scheme as the selected state on desktop: no object-fit,
+   every value a multiplier of 100dvh computed in src/lib/framing.ts, so the
+   layout engine re-resolves it on rotation. The height is clamped there, which
+   is what keeps the top of the hair clear of the top edge. */
+.mobile-full {
+  position: absolute;
+  z-index: 1;
+  bottom: 0;
+  left: calc(50% + (var(--m-full-dx) * 100dvh));
+  width: calc(var(--m-full-w) * 100dvh);
+  height: calc(var(--m-full-h) * 100dvh);
+  max-width: none;
+  /* Pivot on the head anchor and the floor, so a scale keeps the head on the
+     centre line and the feet on the bottom edge. */
+  transform-origin: var(--m-full-ox) 100%;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* Top left: the bottom right is where the circles are, and the head is on the
+   centre line. The mask is exactly the text box, so the h2 is completely hidden
+   at yPercent: 100 -- same reveal as the strips' selected state. */
+.mobile-name-mask {
+  position: absolute;
+  z-index: 2;
+  top: max(1rem, env(safe-area-inset-top));
+  left: max(1.25rem, env(safe-area-inset-left));
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.mobile-name {
+  margin: 0;
+  font-family: var(--font-anton), system-ui, sans-serif;
+  font-size: clamp(2.5rem, 13vw, 4.5rem);
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: -0.015em;
+  text-transform: uppercase;
+  color: var(--accent);
+  text-shadow:
+    0 0 0.3em var(--accent-glow),
+    0 0 1.1em var(--accent-glow);
+}
+
+.mobile-picker {
+  position: absolute;
+  /* Above both stage layers, which are 0 and 1. */
+  z-index: 5;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--m-gap);
+  padding-top: 14px;
+  padding-right: max(16px, env(safe-area-inset-right));
+  padding-bottom: max(24px, calc(env(safe-area-inset-bottom) + 16px));
+  padding-left: max(16px, env(safe-area-inset-left));
+  /* Centred while the row fits. Once it does not, plain `center` would push the
+     first circle out of the scrollable range and make it unreachable; `safe`
+     falls back to flex-start at exactly that point. */
+  justify-content: center;
+  justify-content: safe center;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  /* A scrollbar over the art would be visible on every desktop-class browser
+     that reaches this width. */
+  scrollbar-width: none;
+}
+
+.mobile-picker::-webkit-scrollbar {
+  display: none;
+}
+
+/* Never shrinks below its floor: the row scrolls instead, so the circle stays a
+   tap target. */
+.picker-circle {
+  flex: 0 0 auto;
+  scroll-snap-align: center;
+  display: block;
+  width: var(--m-circle);
+  height: var(--m-circle);
+  padding: 0;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  /* Faces have to stay readable over any wallpaper, so the head sits on its own
+     dark disc rather than straight on the background. */
+  background: rgb(6 6 8 / 0.62);
+  box-shadow:
+    0 0 10px var(--accent-glow),
+    0 2px 14px rgb(0 0 0 / 0.45);
+  overflow: hidden;
+  cursor: pointer;
+  appearance: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.picker-avatar {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* The copy of a tapped circle, bursting where the real one stood. Fixed, not
+   absolute: the row is a scroll container and would clip it, and nothing above
+   it in the tree is transformed, so fixed still resolves to the viewport. */
+.picker-pop {
+  position: fixed;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.picker-circle--pop {
+  width: 100%;
+  height: 100%;
+  cursor: default;
+}
+
+/* Carries on outward after the disc has gone. Starts invisible: the timeline
+   fades it in and out within its own tween. */
+.picker-pop-ring {
+  position: absolute;
+  inset: 0;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  opacity: 0;
+}
+
+/* ---------------------------------------------------------------------------
    Dev-only framing check (press G).
 --------------------------------------------------------------------------- */
 
