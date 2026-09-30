@@ -1,4 +1,5 @@
 import { assets } from "@/data/characters";
+import { hasPose, isSharedPose } from "@/lib/story";
 
 /**
  * One definition of each layer's <picture> sources, used both by the components
@@ -40,6 +41,23 @@ export const closeupSources = (id: string): PictureSource[] => [
   { type: "image/avif", srcSet: assets.closeup(id, 1400, "avif") },
 ];
 export const closeupFallback = (id: string) => assets.closeup(id, 1400);
+
+/**
+ * A story pose. `front` is the Full view under another name -- same artwork,
+ * same files -- so it resolves straight to the layer the lineup already warms
+ * and the browser never fetches a second copy of it.
+ */
+export const poseSources = (id: string, key: string): PictureSource[] =>
+  isSharedPose(key)
+    ? fullSources(id)
+    : [
+        { type: "image/avif", media: TALL_MEDIA, srcSet: assets.pose(id, key, 3200, "avif") },
+        { type: "image/webp", media: TALL_MEDIA, srcSet: assets.pose(id, key, 3200) },
+        { type: "image/avif", srcSet: assets.pose(id, key, 1600, "avif") },
+      ];
+
+export const poseFallback = (id: string, key: string) =>
+  isSharedPose(key) ? fullFallback(id) : assets.pose(id, key, 1600);
 
 const cache = new Map<string, Promise<void>>();
 
@@ -121,5 +139,24 @@ export function preloadMobileStage(id: string): Promise<void> {
       warm(bgSources(id), bgFallback(id), "low"),
       warm(mobileFullSources(id), mobileFullFallback(id), "low"),
     ]).then(() => undefined),
+  );
+}
+
+/**
+ * Every pose a character's chapters can show, warmed in one go the moment they
+ * are selected. All of them sit in the DOM at once and the story crossfades
+ * between them under the scroll position, so one arriving late would not read
+ * as a slow image -- it would be a hole in the middle of a transition.
+ *
+ * A chapter naming a pose the build never wrote is skipped rather than
+ * requested: `npm run images` already reports the missing file, and a 404 per
+ * pose per selection would only bury it.
+ */
+export function preloadPoses(id: string, keys: string[]): Promise<void> {
+  const real = keys.filter((key) => hasPose(id, key));
+  return once(`poses:${id}`, () =>
+    Promise.all(real.map((key) => warm(poseSources(id, key), poseFallback(id, key)))).then(
+      () => undefined,
+    ),
   );
 }

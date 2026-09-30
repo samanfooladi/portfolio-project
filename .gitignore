@@ -30,3 +30,8 @@ next-env.d.ts
 
 # local backup of the previous vite starter
 _vite-backup/
+
+# large source art (kept locally, not in git)
+assets-source/foxy/
+assets-source/navid/
+assets-source/sam/

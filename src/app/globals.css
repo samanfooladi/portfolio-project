@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 @theme inline {
-  --font-display: var(--font-anton);
+  --font-display: var(--font-slab);
   --font-sans: var(--font-inter);
 }
 
@@ -15,6 +15,15 @@ body {
   background: #050505;
   color: #f5f5f5;
   overscroll-behavior: none;
+}
+
+/* Set by <StoryChapters> for as long as a story is on screen, and only then.
+   Everywhere else this app is a fixed, clipped viewport with nothing to
+   scroll -- the story adds a spacer to <body> and needs the page to let it. */
+html[data-story-scroll],
+html[data-story-scroll] body {
+  height: auto;
+  overflow: visible;
 }
 
 body {
@@ -231,6 +240,14 @@ body {
   display: contents;
 }
 
+/* `display: contents` above hoists the <source> elements into whatever layout
+   the <picture> was sitting in, and a <source> is not display:none by default
+   -- so inside the story's grid each one became an item of its own, pushing the
+   poses off the floor. They carry no content; they get no box either. */
+.stage source {
+  display: none;
+}
+
 .stage-bg {
   position: absolute;
   inset: 0;
@@ -283,27 +300,387 @@ body {
   -webkit-user-drag: none;
 }
 
-.stage-name-mask {
+/* ---------------------------------------------------------------------------
+   The scroll story.
+
+   The wallpaper does not move for any of it. Two things do: ONE figure that
+   travels between the two columns, and a text block per chapter that only ever
+   fades. They cannot collide, because the split is what defines them -- the
+   figure owns `--story-col` from one edge and the text owns everything left
+   over from the other, and the figure changing sides swaps which edge is which.
+
+   Every animated property here is written by GSAP as an inline style. The
+   values below are the resting state it overrides: nothing visible until a
+   chapter says so.
+--------------------------------------------------------------------------- */
+
+.story {
+  position: absolute;
+  z-index: 11;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Parked on the left column; travelling is a translate from here, which is why
+   the box itself never changes side. Everything that goes where the character
+   goes -- the poses, and any overlay drawn around them -- lives inside it, and
+   is layered by z-index: overlays behind at 0, poses at 1, overlays in front
+   at 2. The translate makes this a stacking context, so those stay local. */
+.story-figure {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: var(--story-col);
+  height: 100%;
+}
+
+/* The poses themselves. Grid rather than flex so every pose lands in the same
+   cell and can crossfade with the one before it. The accent shadow is on this
+   box rather than the figure, so an overlay beside it does not inherit one. */
+.story-poses {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  display: grid;
+  place-items: end center;
+}
+
+.story-pose {
+  grid-area: 1 / 1;
+  /* The height belongs to the figure, not to the image: a full body becoming a
+     bust is then one value to interpolate across the crossfade rather than two
+     images of different sizes swapping. */
+  height: var(--pose-h);
+  width: auto;
+  /* A long tail on a short viewport would otherwise reach out of its column and
+     under the text. Contained and bottom-aligned, it shrinks instead. */
+  max-width: 100%;
+  object-fit: contain;
+  object-position: bottom center;
+  opacity: 0;
+  visibility: hidden;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* Always present and always empty-looking: the lines inside it are what fade,
+   which keeps `visibility` on one element rather than on a parent whose
+   children would inherit the hidden state back. */
+.story-text {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  width: calc(100% - var(--story-col));
+  padding: 0 var(--story-gutter);
+}
+
+.story-text[data-side="left"] {
+  left: 0;
+}
+
+.story-text[data-side="right"] {
+  right: 0;
+}
+
+.story-block {
+  width: 100%;
+  max-width: var(--story-text-max);
+  margin: 0 auto;
+  /* The wallpaper underneath is photographic and bright in places. This is the
+     whole of the styling: enough shadow to stay readable over it. */
+  text-shadow: 0 1px 10px rgb(0 0 0 / 0.7);
+}
+
+/* The resting state the master timeline runs forward from. */
+[data-story-line] {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.story-title {
+  margin: 0 0 1.1em;
+  font-size: clamp(1.35rem, 1.9vw, 2rem);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  color: var(--story-accent);
+}
+
+.story-line {
+  margin: 0 0 0.85em;
+  font-size: clamp(0.95rem, 1.05vw, 1.15rem);
+  line-height: 1.65;
+  color: rgb(245 245 245 / 0.92);
+}
+
+.story-line:last-child {
+  margin-bottom: 0;
+}
+
+/* The one piece of styling the text carries, and the data does not: the
+   character's own name, found by <@/lib/story>. Other names stay plain. */
+.story-name {
+  color: var(--story-accent);
+  font-weight: 700;
+}
+
+/* ---- Geometry overlay -----------------------------------------------------
+   Two layers sandwiching the poses, each clipped to the character's column so
+   no figure can ever reach the text. Inside each, a box exactly the size and
+   place of the pose's drawn art -- the same min() the pose's own object-fit
+   arrives at -- so figure positions, as fractions of it, stay on the body at
+   any viewport. */
+.geo-root {
+  display: contents;
+}
+
+.geo {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.geo--back {
+  z-index: 0;
+}
+
+.geo--front {
+  z-index: 2;
+}
+
+/* Centred by auto margins rather than a translate: GSAP scales this on exit,
+   and would clear a translate it had not set. */
+.geo-box {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  width: min(100%, calc(var(--geo-h) * var(--geo-aspect)));
+  aspect-ratio: var(--geo-aspect);
+  transform-origin: 50% 60%;
+}
+
+.geo-fig {
+  position: absolute;
+}
+
+/* One small layer per figure. Its drift and pulse are transform and opacity,
+   which move it on the compositor; the glow is rasterised with it once, not
+   re-run per frame. */
+.geo-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  will-change: transform, opacity;
+  filter: drop-shadow(0 0 var(--geo-glow) rgb(255 255 255 / var(--geo-glow-a)));
+}
+
+/* No fill, no material: an edge and nothing else. Non-scaling, so it is the
+   configured width in screen pixels whatever size the figure is drawn at. */
+.geo-stroke {
+  fill: none;
+  stroke: #fff;
+  stroke-width: var(--geo-stroke);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+
+.geo-stroke--back {
+  stroke-opacity: 0.5;
+}
+
+.geo-label {
+  fill: #fff;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: calc(var(--geo-label) * 1px);
+  letter-spacing: 0.04em;
+  text-anchor: middle;
+  dominant-baseline: middle;
+  opacity: 0;
+}
+
+/* The page's entire height. `.select-root` is fixed on top of it, so this is
+   never seen -- it exists so there is something for the scroll to move. */
+.story-scroll {
+  height: calc(var(--story-pages) * 100dvh);
+  pointer-events: none;
+}
+
+/* Bottom of the hero, saying the page goes on. */
+.story-hint {
   position: absolute;
   z-index: 12;
-  right: clamp(1.5rem, 4vw, 4rem);
-  bottom: clamp(1rem, 3vh, 3rem);
+  bottom: clamp(1rem, 3vh, 2rem);
+  left: 50%;
+  translate: -50% 0;
+  color: rgb(255 255 255 / 0.55);
+  animation: story-hint-bob 1.8s ease-in-out infinite;
+}
+
+.story-hint svg {
+  width: 1.75rem;
+  height: 1.75rem;
+  display: block;
+}
+
+@keyframes story-hint-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .story-hint {
+    animation: none;
+  }
+}
+
+/* Dev only. Bottom left is the one corner nothing else uses. */
+.story-devbar {
+  position: absolute;
+  z-index: 60;
+  bottom: 1rem;
+  left: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 8px;
+  background: rgb(0 0 0 / 0.6);
+  font-size: 11px;
+  font-family: ui-monospace, monospace;
+  color: rgb(255 255 255 / 0.65);
+  pointer-events: auto;
+}
+
+.story-devbar button {
+  padding: 4px 7px;
+  border: 1px solid rgb(255 255 255 / 0.2);
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.story-devbar button[data-on] {
+  border-color: var(--story-accent);
+  color: #fff;
+}
+
+/* ---------------------------------------------------------------------------
+   The character name, on both screens.
+
+   Gradient fill and `text-shadow` cannot coexist: the face is a gradient
+   clipped to the glyphs, which means `color: transparent`, and a transparent
+   glyph casts nothing. So the depth is real DOM instead -- a stack of flat
+   copies built by <CharacterName>, each one pixel further down and right and a
+   shade darker than the one in front of it, with a blurred copy at the back
+   sitting the whole block on the wallpaper.
+
+   Only the corner and the type scale differ between the two screens. Each
+   placement sets its own `font-size` on the mask; everything from `--cn-pad`
+   down is shared, and the rest arrives as custom properties from the
+   component, derived from that character's own gradient.
+--------------------------------------------------------------------------- */
+
+.cname-mask {
+  /* Room for the extrusion, the blurred shadow, and whatever the tilt throws
+     outside the text. It goes on the h2 rather than here, so the mask stays
+     exactly the h2's box and yPercent: 100 still hides it completely; the two
+     placements subtract it again from their corner offsets so the padding does
+     not push the name in off its corner. The px floor is there because the
+     extrusion is measured in px and does not shrink with the type. */
+  --cn-pad: max(30px, 0.28em);
   overflow: hidden;
   pointer-events: none;
 }
 
-.stage-name {
+.cname {
   margin: 0;
-  font-family: var(--font-anton), system-ui, sans-serif;
-  font-size: clamp(3rem, 8vw, 7rem);
+  padding: var(--cn-pad);
+  font-family: var(--font-slab), Georgia, serif;
+  font-size: 1em;
   font-weight: 400;
   line-height: 1;
-  letter-spacing: -0.015em;
+  letter-spacing: -0.005em;
   text-transform: uppercase;
-  color: var(--accent);
-  text-shadow:
-    0 0 0.3em var(--accent-glow),
-    0 0 1.1em var(--accent-glow);
+  user-select: none;
+}
+
+.cname-3d {
+  display: block;
+  perspective: var(--cn-perspective);
+}
+
+/* One grid cell holding every copy, so the face and the layers behind it are
+   laid out identically -- an absolutely positioned copy would pick up a
+   different half-leading from the inline box the face sits in and land a pixel
+   off. GSAP takes this element over on desktop to lean it toward the pointer;
+   the angles here are the ones it starts from. */
+.cname-tilt {
+  position: relative;
+  display: inline-grid;
+  transform: rotateX(var(--cn-rx)) rotateY(var(--cn-ry));
+}
+
+.cname-tilt > * {
+  grid-area: 1 / 1;
+  margin: 0;
+}
+
+.cname-shadow {
+  color: var(--cn-shadow);
+  transform: translate(var(--cn-shadow-x), var(--cn-shadow-y));
+  filter: blur(var(--cn-shadow-blur));
+}
+
+/* Two backgrounds, both clipped to the glyphs: the character's own gradient,
+   and a narrow lighter band raked across it that reads as a highlight rolling
+   over the letters. The stroke is the only thing holding them apart from a
+   bright wallpaper, since there is no glow behind them any more. */
+.cname-face {
+  position: relative;
+  background-image:
+    linear-gradient(
+      174deg,
+      transparent 33%,
+      rgb(255 255 255 / 0.44) 42%,
+      rgb(255 255 255 / 0.1) 48%,
+      transparent 54%
+    ),
+    linear-gradient(160deg, var(--cn-stops));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-stroke: var(--cn-outline-w) var(--cn-outline);
+}
+
+/* Bottom right of the selected state. See .cname below for the lettering. */
+.cname-mask--stage {
+  position: absolute;
+  z-index: 12;
+  /* The offsets are to the glyphs, not to the padded box, so the padding comes
+     back off them -- clamped at 0, because on a short viewport the gap is
+     smaller than the padding and a negative offset would hang the extrusion
+     off the screen edge instead of holding it clear of it. */
+  right: max(0px, calc(clamp(1.5rem, 4vw, 4rem) - var(--cn-pad)));
+  bottom: max(0px, calc(clamp(1rem, 3vh, 3rem) - var(--cn-pad)));
+  font-size: clamp(3rem, 8vw, 7rem);
 }
 
 .back-button {
@@ -414,29 +791,13 @@ body {
 }
 
 /* Top left: the bottom right is where the circles are, and the head is on the
-   centre line. The mask is exactly the text box, so the h2 is completely hidden
-   at yPercent: 100 -- same reveal as the strips' selected state. */
-.mobile-name-mask {
+   centre line. Same lettering as the selected state, one size down. */
+.cname-mask--mobile {
   position: absolute;
   z-index: 2;
-  top: max(1rem, env(safe-area-inset-top));
-  left: max(1.25rem, env(safe-area-inset-left));
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.mobile-name {
-  margin: 0;
-  font-family: var(--font-anton), system-ui, sans-serif;
+  top: max(0px, calc(max(1rem, env(safe-area-inset-top)) - var(--cn-pad)));
+  left: max(0px, calc(max(1.25rem, env(safe-area-inset-left)) - var(--cn-pad)));
   font-size: clamp(2.5rem, 13vw, 4.5rem);
-  font-weight: 400;
-  line-height: 1;
-  letter-spacing: -0.015em;
-  text-transform: uppercase;
-  color: var(--accent);
-  text-shadow:
-    0 0 0.3em var(--accent-glow),
-    0 0 1.1em var(--accent-glow);
 }
 
 .mobile-picker {

@@ -26,6 +26,12 @@ export type Anchors = {
    * reason about the crop without loading one.
    */
   headBox?: HeadBox | null;
+  /**
+   * Story poses, keyed the same way the chapters are. A pose is stood on the
+   * bottom edge at a height of its own, so the aspect ratio is the only thing
+   * worth measuring -- there is no head line to hang it from.
+   */
+  poses?: Record<string, { aspect: number | null }> | null;
 };
 
 const ANCHORS = anchorsJson as Record<string, Anchors>;

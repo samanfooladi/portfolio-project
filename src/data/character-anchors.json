@@ -24,6 +24,20 @@
       "w": 0.7875,
       "h": 0.5443
     },
+    "poses": {
+      "back": {
+        "aspect": 0.3433
+      },
+      "bullet-tail": {
+        "aspect": 0.6669
+      },
+      "profile": {
+        "aspect": 0.7509
+      },
+      "tea": {
+        "aspect": 0.6312
+      }
+    },
     "fullAspect": 0.3463,
     "closeupAspect": 0.6919
   },
@@ -51,6 +65,20 @@
       "y": -0.0278,
       "w": 0.5395,
       "h": 0.4221
+    },
+    "poses": {
+      "evade": {
+        "aspect": 0.4665
+      },
+      "plan": {
+        "aspect": 0.7682
+      },
+      "sense": {
+        "aspect": 0.8142
+      },
+      "stand": {
+        "aspect": 0.3206
+      }
     },
     "fullAspect": 0.3038,
     "closeupAspect": 0.7833
@@ -93,6 +121,20 @@
       "y": -0.0346,
       "w": 0.446,
       "h": 0.446
+    },
+    "poses": {
+      "charge": {
+        "aspect": 0.6887
+      },
+      "crash": {
+        "aspect": 0.6972
+      },
+      "face-scar": {
+        "aspect": 0.7544
+      },
+      "shirtless": {
+        "aspect": 0.4034
+      }
     },
     "fullAspect": 0.4297,
     "closeupAspect": 1.0004

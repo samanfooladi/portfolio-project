@@ -1,11 +1,14 @@
 import type { Metadata, Viewport } from "next";
-import { Anton, Inter } from "next/font/google";
+import { Alfa_Slab_One, Inter } from "next/font/google";
 import "./globals.css";
 
-const anton = Anton({
+// The character names, and nothing else. A slab this heavy is what lets the
+// gradient fill and the pixel-step extrusion read at all -- thinner strokes
+// leave neither enough glyph to work with.
+const slab = Alfa_Slab_One({
   subsets: ["latin"],
   weight: "400",
-  variable: "--font-anton",
+  variable: "--font-slab",
   display: "swap",
 });
 
@@ -31,7 +34,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${anton.variable} ${inter.variable}`}>
+    <html lang="en" className={`${slab.variable} ${inter.variable}`}>
       <body>{children}</body>
     </html>
   );

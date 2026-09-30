@@ -1,9 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { CHARACTERS, TUNING } from "@/data/characters";
+import type { EntryMode } from "./CharacterExperience";
 import { HEAD_TOP_F } from "@/lib/framing";
 import { preloadStage } from "@/lib/sources";
 import CharacterStrip from "./CharacterStrip";
@@ -78,7 +86,18 @@ function addWipe(
   );
 }
 
-export default function CharacterSelect() {
+type Props = {
+  /** The selected character, or null for the lineup. Owned above this tree so
+      it survives the remount a breakpoint crossing causes. */
+  selectedId: string | null;
+  /** Whether arriving at `selectedId` should play the full sequence or land in
+      it already finished. */
+  entry: EntryMode;
+  onSelect: (id: string) => void;
+  onBack: () => void;
+};
+
+export default function CharacterSelect({ selectedId, entry, onSelect, onBack }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const stripsRef = useRef<HTMLElement[]>([]);
   const timelineRef = useRef<gsap.core.Timeline | null>(null);
@@ -90,23 +109,89 @@ export default function CharacterSelect() {
    */
   const lockedRef = useRef(false);
   const animatingRef = useRef(false);
+  /** The native click handlers below are attached once, and outlive every
+      identity `onSelect` may take. */
+  const onSelectRef = useRef(onSelect);
+  useEffect(() => {
+    onSelectRef.current = onSelect;
+  }, [onSelect]);
 
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  /**
+   * What is on screen, which lags `selectedId` on the way out: clearing the
+   * prop starts the exit, and the stage only stops being rendered once that
+   * has finished playing. Going in there is no lag -- the stage has to exist
+   * before a timeline can be built against it.
+   */
+  const [shownId, setShownId] = useState<string | null>(selectedId);
   const [isAnimating, setIsAnimating] = useState(false);
   const [debug, setDebug] = useState(false);
+  /** The mode the arrival on screen was requested with, frozen at the moment
+      it was requested so a later prop change cannot rewrite a running one. */
+  const [entryMode, setEntryMode] = useState<EntryMode>(entry);
+  /** The last `selectedId` this tree has taken up, so the two directions can
+      be told apart from one render to the next. */
+  const [ackId, setAckId] = useState<string | null>(selectedId);
+  /** True from the moment the exit is handed to a timeline until that timeline
+      has cleared the stage, so a second request cannot start another. */
+  const exitingRef = useRef(false);
+  /**
+   * How the exit puts the scroll story away, filled in by <StoryChapters> and
+   * null for a character that has none. It lives here rather than on the Back
+   * button because the button is not the only way out: Escape and the
+   * browser's own back button both land on the exit too, and this way all
+   * three take one path instead of three that have to keep agreeing.
+   */
+  const storyResetRef = useRef<(() => void) | null>(null);
 
-  const selectedIndex = selectedId ? CHARACTERS.findIndex((c) => c.id === selectedId) : -1;
+  /**
+   * Taking up a new selection, during render rather than in an effect: React
+   * re-runs this component before committing, so the pass that still had the
+   * old character never reaches the screen.
+   *
+   * Only the arriving direction is settled here. Leaving is a timeline, and a
+   * timeline is a side effect -- `shownId` outlives the selection being
+   * dropped and is cleared on the exit's last frame instead.
+   */
+  if (selectedId !== ackId) {
+    setAckId(selectedId);
+    if (selectedId) {
+      setEntryMode(entry);
+      setShownId(selectedId);
+    }
+  }
+
+  const selectedIndex = shownId ? CHARACTERS.findIndex((c) => c.id === shownId) : -1;
   const selected = selectedIndex >= 0 ? CHARACTERS[selectedIndex] : null;
 
-  const handleBack = useCallback(() => {
-    if (animatingRef.current) return;
+  /**
+   * Plays the selected state out and, once it has, stops rendering the stage.
+   *
+   * Not wired to the Back button directly. Both that button and the browser's
+   * own back go through history, which clears `selectedId` above this tree;
+   * this runs off that clearing, so the two are the same path rather than two
+   * paths that have to be kept agreeing.
+   */
+  const runExit = useCallback(() => {
+    // Before anything is animated: the page jumps back to the top and the
+    // story's trigger is dropped, so the chapters do not play themselves out
+    // underneath an exit that knows nothing about them.
+    storyResetRef.current?.();
 
     const strips = stripsRef.current;
     const stage = rootRef.current?.querySelector<HTMLElement>("[data-stage]");
-    if (!stage) return;
+    if (!stage) {
+      setShownId(null);
+      exitingRef.current = false;
+      return;
+    }
 
     animatingRef.current = true;
     setIsAnimating(true);
+
+    // An arrival that faded the stage as a whole leaves an opacity behind, and
+    // an opacity below 1 makes the stage a stacking context -- which would put
+    // the wipe underneath the returning strips instead of over them.
+    gsap.set(stage, { clearProps: "opacity,visibility" });
 
     const wipeEl = stage.querySelector<HTMLElement>("[data-stage-wipe]")!;
     const { duration, wipe, bgIdleScale } = TUNING;
@@ -115,10 +200,11 @@ export default function CharacterSelect() {
     timelineRef.current?.kill();
     const tl = gsap.timeline({
       onComplete: () => {
-        setSelectedId(null);
+        setShownId(null);
         setIsAnimating(false);
         animatingRef.current = false;
         lockedRef.current = false;
+        exitingRef.current = false;
       },
     });
     timelineRef.current = tl;
@@ -131,8 +217,14 @@ export default function CharacterSelect() {
         0.15,
       );
 
-    // Wipe recedes right to left, uncovering the dimmed base layer.
-    addWipe(tl, wipeEl, 100, -wipe.feather, back.wipe, 0.4);
+    // Wipe recedes right to left, uncovering the dimmed base layer. From
+    // wherever it actually is, not from 100: the browser's back button can
+    // arrive part way through an arrival, which the in-app one could not, and
+    // assuming the wipe had landed would snap it across before receding.
+    // parseFloat, not Number: an unset property reads as "", which Number
+    // would quietly turn into a fully receded wipe.
+    const wipeFrom = parseFloat(wipeEl.style.getPropertyValue("--wipe"));
+    addWipe(tl, wipeEl, Number.isNaN(wipeFrom) ? 100 : wipeFrom, -wipe.feather, back.wipe, 0.4);
 
     // Strips return while the wipe is still receding, so the dimmed base is
     // only ever on screen briefly.
@@ -145,6 +237,17 @@ export default function CharacterSelect() {
         0.55 + (dist - 1) * wipe.exitStagger,
       );
     });
+
+    // The selected strip only moved if this arrival was the animated one; an
+    // immediate arrival hid it along with the rest, so it has to come back too.
+    // Where it never left, this tween is a no-op onto the values it already has.
+    if (strips[selectedIndex]) {
+      tl.to(
+        strips[selectedIndex],
+        { xPercent: 0, autoAlpha: 1, duration: back.strips, ease: "power3.out" },
+        0.55,
+      );
+    }
 
     // Undo any hover state the strips were left in.
     tl.to(strips, { flexGrow: 1, duration: back.strips, ease: "power3.out" }, 0.55)
@@ -221,8 +324,10 @@ export default function CharacterSelect() {
         const id = strips[index].dataset.id!;
         // If the hover preload has not finished (or never started, e.g. a
         // keyboard activation), wait rather than wiping to a blank layer.
+        // The selection itself is not ours to hold: it goes up, into the URL,
+        // and comes back down as a prop.
         void preloadStage(id).then(() => {
-          setSelectedId(id);
+          onSelectRef.current(id);
         });
       };
 
@@ -267,10 +372,21 @@ export default function CharacterSelect() {
     { scope: rootRef },
   );
 
-  // The selection timeline can only be built once React has rendered the stage.
+  // The leaving direction. The selection is already gone above this tree --
+  // the URL no longer names anyone -- and this plays the screen out to match.
   useEffect(() => {
-    if (!selectedId) return;
-    const index = CHARACTERS.findIndex((c) => c.id === selectedId);
+    if (selectedId || !shownId || exitingRef.current) return;
+    exitingRef.current = true;
+    runExit();
+  }, [selectedId, shownId, runExit]);
+
+  // The selection timeline can only be built once React has rendered the
+  // stage. A layout effect, not an effect: an immediate arrival hides the
+  // strips, and a paint in between would flash the whole lineup on a reload
+  // that was never meant to show one.
+  useLayoutEffect(() => {
+    if (!shownId) return;
+    const index = CHARACTERS.findIndex((c) => c.id === shownId);
     const strips = stripsRef.current;
     const stage = rootRef.current?.querySelector<HTMLElement>("[data-stage]");
     if (!stage || index < 0) return;
@@ -282,11 +398,70 @@ export default function CharacterSelect() {
     const selectedFull = strips[index]?.querySelector<HTMLElement>("[data-full]");
     const { duration, wipe } = TUNING;
 
+    timelineRef.current?.kill();
+    exitingRef.current = false;
+    lockedRef.current = true;
+    animatingRef.current = true;
+    setIsAnimating(true);
+
+    if (entryMode === "immediate") {
+      // Nothing to sweep away and nothing to reveal: this state was arrived at,
+      // not transitioned into. Every layer is put where the full sequence would
+      // have left it and the whole stage is faded up over one short beat.
+      strips.forEach((strip, i) => {
+        if (i === index) {
+          // Hidden where it stands rather than sent off with the others: it is
+          // under a stage that is about to fade up from nothing, and a strip
+          // showing through that fade is the lineup this arrival exists to
+          // skip. The exit brings it back with the rest.
+          gsap.set(strip, { autoAlpha: 0 });
+          return;
+        }
+        const dir = i < index ? -1 : 1;
+        gsap.set(strip, { xPercent: dir * wipe.exitDistance, autoAlpha: 0 });
+      });
+      gsap.set(selectedFull, { autoAlpha: 0 });
+      wipeEl.style.setProperty("--wipe", "100");
+      gsap.set(closeup, { autoAlpha: 1, y: 0, scale: 1 });
+      gsap.set(name, { yPercent: 0 });
+      gsap.set(backBtn, { autoAlpha: 1, y: 0 });
+      gsap.set(stage, { autoAlpha: 0 });
+
+      const settle = () => {
+        // The opacity goes away rather than landing on 1: below 1 it makes the
+        // stage a stacking context, and leaving the declaration behind invites
+        // the next reader to assume it never was one.
+        gsap.set(stage, { clearProps: "opacity,visibility" });
+        setIsAnimating(false);
+        animatingRef.current = false;
+      };
+
+      const tl = gsap.timeline({ paused: true, onComplete: settle });
+      tl.to(stage, { autoAlpha: 1, duration: duration.restore, ease: "power2.out" }, 0);
+      timelineRef.current = tl;
+
+      // Fading up art that has not decoded yet is a fade to black, so the beat
+      // waits for it -- but not indefinitely, since the screen behind it is
+      // blank either way.
+      let cancelled = false;
+      const start = () => {
+        if (!cancelled) tl.play();
+      };
+      void preloadStage(shownId).then(start);
+      const fallback = window.setTimeout(start, duration.restoreWait * 1000);
+
+      return () => {
+        cancelled = true;
+        window.clearTimeout(fallback);
+        tl.kill();
+        if (timelineRef.current === tl) timelineRef.current = null;
+      };
+    }
+
     gsap.set(closeup, { autoAlpha: 0, y: 40, scale: 1.04 });
     gsap.set(name, { yPercent: 100 });
     gsap.set(backBtn, { autoAlpha: 0, y: -10 });
 
-    timelineRef.current?.kill();
     // lockedRef stays true: the idle screen is still behind the stage.
     const tl = gsap.timeline({
       onComplete: () => {
@@ -334,26 +509,33 @@ export default function CharacterSelect() {
       tl.kill();
       if (timelineRef.current === tl) timelineRef.current = null;
     };
-  }, [selectedId]);
+  }, [shownId, entryMode]);
+
+  /** What the Back button and Escape both do: ask for the selection to be
+      dropped. The exit plays when it actually is. */
+  const requestBack = useCallback(() => {
+    if (animatingRef.current) return;
+    onBack();
+  }, [onBack]);
 
   // Escape does what the back button does.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && selectedId) {
+      if (e.key === "Escape" && shownId) {
         e.preventDefault();
-        handleBack();
+        requestBack();
       }
       if (IS_DEV && (e.key === "g" || e.key === "G")) setDebug((d) => !d);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selectedId, handleBack]);
+  }, [shownId, requestBack]);
 
   return (
     <div
       ref={rootRef}
       className="select-root"
-      data-selected={selectedId ?? undefined}
+      data-selected={shownId ?? undefined}
       data-animating={isAnimating || undefined}
       style={
         {
@@ -369,7 +551,17 @@ export default function CharacterSelect() {
     >
       {/* Before the strips in the DOM: the stage's base layer must paint under
           them, while its other layers carry explicit z-indexes to sit on top. */}
-      {selected && <SelectedStage character={selected} onBack={handleBack} debug={debug} />}
+      {selected && (
+        <SelectedStage
+          character={selected}
+          onBack={requestBack}
+          debug={debug}
+          // The story may not build over an arrival that is still playing:
+          // both write the close-up and the name.
+          storyEnabled={!isAnimating}
+          storyResetRef={storyResetRef}
+        />
+      )}
 
       {CHARACTERS.map((character, i) => (
         <CharacterStrip

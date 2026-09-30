@@ -11,7 +11,7 @@ import {
 import gsap from "gsap";
 import { accentRgba, type Character, CHARACTERS, MOBILE, TUNING } from "@/data/characters";
 import { anchorsFor, mobileFramingFor } from "@/lib/framing";
-import { initialSelectedId, rememberSelectedId } from "@/lib/selection";
+import { rememberSelectedId } from "@/lib/selection";
 import {
   bgFallback,
   bgSources,
@@ -20,6 +20,7 @@ import {
   preloadMobileStage,
   type PictureSource,
 } from "@/lib/sources";
+import CharacterName from "./CharacterName";
 import CharacterPicker, { PoppingCircle, type PopRect } from "./CharacterPicker";
 
 const byId = (id: string) => CHARACTERS.find((c) => c.id === id) ?? CHARACTERS[0];
@@ -53,8 +54,6 @@ function StageLayer({ character, role }: { character: Character; role: "front" |
           zIndex: role === "front" ? 1 : 0,
           "--bg-fx": `${character.bgFocusX}%`,
           "--bg-fy": `${character.bgFocusY}%`,
-          "--accent": character.accent,
-          "--accent-glow": accentRgba(character.accent, 0.55),
         } as CSSProperties
       }
     >
@@ -94,11 +93,7 @@ function StageLayer({ character, role }: { character: Character; role: "front" |
       )}
 
       {/* 3. The name, top left -- the bottom right belongs to the circles. */}
-      <div className="mobile-name-mask">
-        <h2 className="mobile-name" data-name>
-          {character.name}
-        </h2>
-      </div>
+      <CharacterName character={character} place="mobile" />
     </div>
   );
 }
@@ -125,12 +120,22 @@ function measureCircles(root: HTMLElement): Map<string, DOMRect> {
   return rects;
 }
 
+type Props = {
+  /** Who to open on. Decided above this tree, so a reload, a `?character=`
+      link and a resize down across the breakpoint all land on the right one. */
+  initialId: string;
+  /** Reported on every switch, so a later resize back up to the desktop tree
+      carries the character that is actually on screen. */
+  onSelect: (id: string) => void;
+};
+
 /**
  * The whole mobile screen: one character, their wallpaper, their name, and the
  * others as circles along the bottom. There is no unselected state to return
- * to, which is why the choice is persisted rather than re-picked on every load.
+ * to, which is why a choice made here is persisted rather than re-picked on
+ * every load.
  */
-export default function MobileCharacterView() {
+export default function MobileCharacterView({ initialId, onSelect }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const timelineRef = useRef<gsap.core.Timeline | null>(null);
   /** Read by the tap handler and by the timeline's onComplete, both of which
@@ -139,18 +144,34 @@ export default function MobileCharacterView() {
   /** Circle positions captured before React reflowed the row. */
   const beforeRef = useRef<Map<string, DOMRect>>(new Map());
 
-  // Read during the first render, not in an effect: this tree only ever renders
-  // on the client, so the stored character is on screen from the first paint.
-  const [stage, setStage] = useState<Stage>(() => {
-    const id = initialSelectedId();
-    return { id, from: null, pop: null, slots: [id, null], front: 0 };
-  });
+  /** Read from the switch effect, which is keyed on the character alone and
+      must not re-run for a new `onSelect` identity. */
+  const onSelectRef = useRef(onSelect);
+  useEffect(() => {
+    onSelectRef.current = onSelect;
+  }, [onSelect]);
+
+  // Taken on the first render, not in an effect: the opening character is
+  // already decided by the time this tree mounts, so it is on screen from the
+  // first paint and no other one ever flashes. Only the opening -- a later
+  // `initialId` cannot move a screen that has been switched since.
+  const [stage, setStage] = useState<Stage>(() => ({
+    id: initialId,
+    from: null,
+    pop: null,
+    slots: [initialId, null],
+    front: 0,
+  }));
 
   const selected = byId(stage.id);
   const leaving = stage.from ? byId(stage.from) : null;
 
+  // Both stores, on every character this screen shows -- including the one it
+  // mounted with, which may have come down from a desktop selection that
+  // localStorage has never heard of.
   useEffect(() => {
     rememberSelectedId(stage.id);
+    onSelectRef.current(stage.id);
   }, [stage.id]);
 
   const select = useCallback(
@@ -228,8 +249,6 @@ export default function MobileCharacterView() {
       // waits for the art instead of fading in an empty layer.
       gsap.set(inBg, { autoAlpha: 0 });
       gsap.set(inFull, { autoAlpha: 0, y: reduced ? 0 : entrance.introRise });
-      // autoAlpha as well as the mask: the accent glow has a 1.1em blur that
-      // bleeds back through the mask even with the text entirely below it.
       gsap.set(inName, { autoAlpha: 0, yPercent: reduced ? 0 : 100 });
       // Cleared before measuring: StrictMode builds this timeline twice, and
       // the second pass would otherwise measure a row the first pass had
@@ -356,9 +375,9 @@ export default function MobileCharacterView() {
           : { yPercent: 100, duration: d.nameOut, ease: "power3.in" },
         0,
       )
-      // Out of sight is not enough, for the same reason: kill it once it has
-      // cleared the mask, or its glow sits in the corner for the rest of the
-      // sequence.
+      // Out of sight is not quite enough: the mask is padded out for the
+      // extrusion, so kill it once it has cleared rather than leaving a
+      // departed character's letters parked under the edge.
       .set(outName, { autoAlpha: 0 }, d.nameOut);
 
     // 4. A beat of nothing but the new wallpaper, then the character arrives.

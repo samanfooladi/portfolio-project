@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import type { CSSProperties, RefObject } from "react";
 import { accentRgba, type Character, TUNING } from "@/data/characters";
 import { anchorsFor, closeupFramingFor } from "@/lib/framing";
 import {
@@ -11,11 +11,16 @@ import {
 } from "@/lib/sources";
 import BackButton from "./BackButton";
 import CharacterName from "./CharacterName";
+import StoryChapters from "./StoryChapters";
 
 type Props = {
   character: Character;
   onBack: () => void;
   debug: boolean;
+  /** False while a selection timeline owns the screen; see <StoryChapters>. */
+  storyEnabled: boolean;
+  /** Handed straight through: the exit calls it to put the story away. */
+  storyResetRef: RefObject<(() => void) | null>;
 };
 
 const renderSources = (sources: { type: string; srcSet: string; media?: string }[]) =>
@@ -30,7 +35,13 @@ const renderSources = (sources: { type: string; srcSet: string; media?: string }
  * them without needing a negative z-index; the layers that must sit on top
  * carry explicit z-indexes instead.
  */
-export default function SelectedStage({ character, onBack, debug }: Props) {
+export default function SelectedStage({
+  character,
+  onBack,
+  debug,
+  storyEnabled,
+  storyResetRef,
+}: Props) {
   const cu = closeupFramingFor(character);
   const a = anchorsFor(character.id);
   const { fullShadow, wipe } = TUNING;
@@ -89,7 +100,16 @@ export default function SelectedStage({ character, onBack, debug }: Props) {
         </picture>
       )}
 
-      <CharacterName character={character} />
+      {/* Renders nothing for a character with no chapters, which is what makes
+          the story opt-in: their selected state is exactly what it was. */}
+      <StoryChapters
+        key={character.id}
+        character={character}
+        enabled={storyEnabled}
+        resetRef={storyResetRef}
+      />
+
+      <CharacterName character={character} place="stage" />
       <BackButton onBack={onBack} />
 
       {debug && <span className="debug-screen-center" />}

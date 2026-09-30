@@ -35,6 +35,23 @@ const LAYERS = {
   closeup: { token: "closeup", heights: [1400, 2400], alpha: true, webp: 90, avif: 62 },
 };
 
+/**
+ * Extra poses, one folder per character: `assets-source/<id>/pose-<key>.png`.
+ *
+ * They stand outside the lineup, so they get no head anchor and no shared head
+ * line -- a story chapter sits one on the bottom edge at a height of its own.
+ * All that is recorded is the aspect ratio, which is the only thing that turns
+ * that height into a width. `sheet-*.png` beside them is reference art for
+ * writing the chapters and is never built.
+ */
+const POSES = {
+  heights: [1600, 3200],
+  webp: 90,
+  avif: 62,
+  match: /^pose-([a-z0-9-]+)\.(png|webp|jpe?g|tiff?)$/i,
+  reference: /^sheet-/i,
+};
+
 /** Cut from the close-up, not matched to a source file. WebP only: the circle
     is small and its alpha edge matters more than the last few KB. */
 const AVATAR = {
@@ -131,6 +148,29 @@ async function indexSources() {
     else found[owner][layer] = path.join(SRC_DIR, file);
   }
   return found;
+}
+
+/** The poses in `assets-source/<id>/`, keyed by the part after `pose-`. */
+async function indexPoses(id) {
+  const dir = path.join(SRC_DIR, id);
+  let files;
+  try {
+    files = await readdir(dir);
+  } catch {
+    return [];
+  }
+
+  const found = [];
+  for (const file of files) {
+    if (POSES.reference.test(file)) continue;
+    const m = POSES.match.exec(file);
+    if (!m) {
+      warn("neither a pose nor a sheet, ignored: " + path.join(id, file));
+      continue;
+    }
+    found.push({ key: m[1].toLowerCase(), src: path.join(dir, file) });
+  }
+  return found.sort((a, b) => a.key.localeCompare(b.key));
 }
 
 const open = (file, trim) => {
@@ -411,6 +451,56 @@ async function main() {
         }
       }
     }
+
+    const poses = await indexPoses(id);
+    for (const { key, src } of poses) {
+      const raw = await sharp(src, { limitInputPixels: false }).metadata();
+
+      // A pose is cut out and stood on the wallpaper exactly like a Full view.
+      // One delivered on an opaque background has nothing for the trim to find
+      // and would ship as a rectangle over the art, so it is reported and left
+      // out rather than quietly built.
+      if (!raw.hasAlpha) {
+        warn(name + " pose " + key + ": opaque background, skipped -- needs a cut-out source");
+        continue;
+      }
+
+      anchors[id].poses ??= {};
+      anchors[id].poses[key] = { aspect: null };
+
+      const layer = "pose-" + key;
+      const tallest = POSES.heights[POSES.heights.length - 1];
+      rows.push({
+        id,
+        layer,
+        pose: key,
+        source: raw.width + "x" + raw.height,
+        largest: path.join(OUT_DIR, id, layer + "-" + tallest + ".webp"),
+        labels: POSES.heights.map((h) => "-" + h),
+        formats: ["webp", "avif"],
+        output: "-",
+        anchor: null,
+        alpha: true,
+      });
+
+      for (const h of POSES.heights) {
+        for (const fmt of ["webp", "avif"]) {
+          const out = path.join(dir, layer + "-" + h + "." + fmt);
+          jobs.push(async () => {
+            const pipe = open(src, true).resize({
+              height: h,
+              fit: "inside",
+              withoutEnlargement: true,
+            });
+            if (fmt === "webp") {
+              await pipe.webp({ quality: POSES.webp, effort: 5, alphaQuality: 100 }).toFile(out);
+            } else {
+              await pipe.avif({ quality: POSES.avif, effort: 4 }).toFile(out);
+            }
+          });
+        }
+      }
+    }
   }
 
   console.log("\nEncoding " + jobs.length + " files (concurrency " + CONCURRENCY + ")...");
@@ -422,7 +512,9 @@ async function main() {
     try {
       const m = await sharp(r.largest).metadata();
       r.output = m.width + "x" + m.height;
-      if (r.alpha) anchors[r.id][r.layer + "Aspect"] = +(m.width / m.height).toFixed(4);
+      // A pose has no head anchor to record, only the trimmed shape.
+      if (r.pose) anchors[r.id].poses[r.pose].aspect = +(m.width / m.height).toFixed(4);
+      else if (r.alpha) anchors[r.id][r.layer + "Aspect"] = +(m.width / m.height).toFixed(4);
     } catch {
       warn("could not read back " + r.largest);
     }
@@ -440,16 +532,16 @@ async function main() {
   };
   const kb = (b) => (b === null ? "  -  " : (b / 1024).toFixed(0).padStart(5));
 
-  console.log("\n" + "-".repeat(104));
+  console.log("\n" + "-".repeat(113));
   console.log(
     "char".padEnd(9) +
-      "layer".padEnd(9) +
+      "layer".padEnd(18) +
       "source".padEnd(14) +
       "shipped".padEnd(12) +
       "headCenterX".padEnd(13) +
       "outputs (KB)",
   );
-  console.log("-".repeat(104));
+  console.log("-".repeat(113));
   for (const r of rows) {
     const parts = [];
     for (const l of r.labels) {
@@ -461,14 +553,14 @@ async function main() {
     }
     console.log(
       r.id.padEnd(9) +
-        r.layer.padEnd(9) +
+        r.layer.padEnd(18) +
         r.source.padEnd(14) +
         r.output.padEnd(12) +
         String(r.anchor ?? "-").padEnd(13) +
         parts.join("   "),
     );
   }
-  console.log("-".repeat(104));
+  console.log("-".repeat(113));
 
   // The head box is what the mobile picker circles are cut to, so it gets its
   // own readout: the numbers only make sense next to the head they were
@@ -481,7 +573,7 @@ async function main() {
       "headBox  x / y / w / h".padEnd(40) +
       "adjust",
   );
-  console.log("-".repeat(104));
+  console.log("-".repeat(113));
   for (const h of heads) {
     const adjust = Object.entries(h.adjust ?? {})
       .map(([k, v]) => k + " " + v)
@@ -497,7 +589,7 @@ async function main() {
         (adjust || "-"),
     );
   }
-  console.log("-".repeat(104));
+  console.log("-".repeat(113));
   console.log("\nAnchors written to " + ANCHORS_FILE);
   console.log(
     "Done in " +

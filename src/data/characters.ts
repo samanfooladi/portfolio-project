@@ -11,8 +11,22 @@ export type Character = {
   name: string;
   /** Name colour / theme colour. Also tints the Full view drop shadow. */
   accent: string;
-  /** Optional second colour sampled from the wallpaper lighting. */
+  /**
+   * Optional second colour sampled from the wallpaper lighting.
+   *
+   * It is also what the scroll story tints with, in place of `accent`. The
+   * story sits over the wallpaper for four unbroken chapters, so an accent the
+   * wallpaper already is reads as nothing at all; a character whose two
+   * colours are far apart should put the far one here.
+   */
   accentSecondary?: string;
+  /**
+   * 3-4 stops the name is filled with, sampled from this character's own art.
+   * Read in order along a 160deg gradient, so stop 0 lands on the top-left of
+   * the letters and the last on the bottom-right. The darkest of them is also
+   * what the 3D extrusion behind the letters is darkened from.
+   */
+  nameGradient: string[];
 
   /** object-position for the bg layer. The bg is never moved to align a character. */
   bgFocusX: number; // %, default 50
@@ -43,6 +57,8 @@ export const CHARACTERS: Character[] = [
     name: "Esmaeel",
     accent: "#E8862A",
     accentSecondary: "#1FA3B5",
+    // Copper stage glow, the burnt-orange haze behind him, warm cream.
+    nameGradient: ["#F5A25E", "#B44E08", "#FFE7D1"],
     bgFocusX: 50,
     bgFocusY: 50,
     // Head leans left of the hair line the anchor is measured from.
@@ -52,6 +68,8 @@ export const CHARACTERS: Character[] = [
     id: "foxy",
     name: "Foxy",
     accent: "#FF9A1F",
+    // Orange fur, deepening through the tail, out to its white tip.
+    nameGradient: ["#FFC24A", "#F08A1C", "#FFF4E2"],
     bgFocusX: 50,
     bgFocusY: 50,
     // Ears already set the box width; this only drops it enough to sit them off
@@ -62,6 +80,10 @@ export const CHARACTERS: Character[] = [
     id: "mh",
     name: "MH",
     accent: "#C9955C",
+    // Sand key light and tan falloff, ending on his grey hoodie. The
+    // middle stop is darker than the art to keep the name off a wallpaper
+    // that is the same sand colour as he is.
+    nameGradient: ["#F3C293", "#7A4A25", "#EFE6DD"],
     bgFocusX: 50,
     bgFocusY: 50,
   },
@@ -69,7 +91,13 @@ export const CHARACTERS: Character[] = [
     id: "navid",
     name: "Navid",
     accent: "#22D3EE",
-    accentSecondary: "#F08A24",
+    // The cold blue-silver of the ripples around his head in pose-sense, for
+    // the story. The aqua above would read too, but it is the colour of the
+    // neon streak running through his wallpaper, and the story sits over that
+    // wallpaper for four chapters.
+    accentSecondary: "#9DC4E8",
+    // The aqua neon and its deep teal, closing on the orange streaks.
+    nameGradient: ["#7DE9F7", "#17A9C4", "#FFEACB"],
     bgFocusX: 50,
     bgFocusY: 50,
     // Tall hair, and a head that sits right of its crown.
@@ -79,6 +107,8 @@ export const CHARACTERS: Character[] = [
     id: "peyman",
     name: "Peyman",
     accent: "#B0305A",
+    // Rose, the crimson wall behind him, pale pink.
+    nameGradient: ["#E7658F", "#93163A", "#FBE4EC"],
     bgFocusX: 50,
     bgFocusY: 50,
   },
@@ -86,13 +116,24 @@ export const CHARACTERS: Character[] = [
     id: "reina",
     name: "Reina",
     accent: "#E01B2F",
+    // Runs light to dark, unlike the rest: her white hair is the read, so
+    // it sits on top and the coat's red lining anchors the bottom.
+    nameGradient: ["#F7F3F5", "#D8172C", "#7A0C16"],
     bgFocusX: 50,
     bgFocusY: 50,
   },
   {
     id: "sam",
     name: "Sam",
-    accent: "#2F7BFF",
+    // Straight off his character sheet, rather than sampled from the art like
+    // everyone else's: the sheet names the electric blue exactly.
+    accent: "#0F56E8",
+    // The hot orange his speed streaks glow, sampled from pose-face-scar. His
+    // blue belongs to the name, the strip and the picker circle; it is also
+    // the colour of his wallpaper, so the story takes this one instead.
+    accentSecondary: "#FF5200",
+    // A tint of that blue, the blue itself, and the sheet's white.
+    nameGradient: ["#6391F0", "#0F56E8", "#F2F2F2"],
     bgFocusX: 50,
     bgFocusY: 50,
     // Spikes reach past the measured head on every side.
@@ -102,6 +143,8 @@ export const CHARACTERS: Character[] = [
     id: "soroush",
     name: "Soroush",
     accent: "#3FD6E8",
+    // The cyan rim light on the coat, the navy under it, ice.
+    nameGradient: ["#76ECFF", "#0B5FB8", "#E9FBFF"],
     bgFocusX: 50,
     bgFocusY: 50,
     // Curls sit wider than the longest opaque run in any single row.
@@ -266,6 +309,12 @@ export const TUNING = {
     name: 0.8,
     /** Beat between the close-up landing and the name rising. */
     nameDelay: 1,
+    /** Arriving already selected -- a reload on `?character=`, a shared link,
+        or a resize back across the breakpoint. There was no lineup to sweep
+        away, so the finished state is simply faded up. */
+    restore: 0.4,
+    /** How long that fade waits on the art before going without it. */
+    restoreWait: 1.2,
     /** Going back is a dedicated timeline, not a reverse: replaying the 1s
         nameDelay backwards would leave a dead second mid-exit. */
     back: {
@@ -278,6 +327,45 @@ export const TUNING = {
   },
 } as const;
 
+/**
+ * The name, on both screens. Everything here is about the 3D lettering, not
+ * where it sits -- the two placements own their own corner and type scale.
+ *
+ * The letters are gradient-filled, which rules out `text-shadow`: with
+ * `background-clip: text` and a transparent colour there is no glyph left for
+ * a shadow to be cast from. So the depth is real DOM instead -- a stack of
+ * flat copies, each one pixel further down and right than the last.
+ */
+export const NAME = {
+  /** Copies behind the face. Each is offset by its own index, so this is also
+      how deep the extrusion reads, in px. */
+  layers: 9,
+  /** How far the deepest stop is darkened for the copy nearest the face, and
+      how much further again by the one at the back. Both 0-1. */
+  depth: { near: 0.42, ramp: 0.3 },
+  /** A blurred copy behind the whole stack, in px. Not part of the extrusion:
+      it is what sits the letters on the wallpaper. */
+  shadow: { x: 9, y: 11, blur: 8, alpha: 0.55 },
+  /** Thin darker edge on the face, so the gradient survives a bright bg. */
+  outline: { width: 1, darken: 0.68, alpha: 0.9 },
+  /** Where the middle stop of a 3-stop gradient sits, in %. Just past centre,
+      which puts the saturated band across the middle of the glyphs rather
+      than the top half of them. */
+  deepStopAt: 54,
+  /** The block is flat; the tilt is what makes it read as lettering rather
+      than a drop shadow. Degrees. */
+  tilt: {
+    perspective: 800,
+    x: 8,
+    y: -12,
+    /** Extra degrees either way as the pointer crosses the viewport. Desktop
+        only, and only with a fine pointer and motion allowed. */
+    follow: 6,
+    /** Seconds for the tilt to catch up to the pointer. */
+    ease: 0.6,
+  },
+} as const;
+
 /** Asset paths, derived from the id. Mirrors scripts/build-images.mjs output. */
 export const assets = {
   bg: (id: string, ext: "webp" | "avif" = "webp") => `/characters/${id}/bg.${ext}`,
@@ -287,10 +375,17 @@ export const assets = {
     `/characters/${id}/closeup-${h}.${ext}`,
   /** Square head crop of the close-up, for the mobile picker. WebP only. */
   avatar: (id: string, s: 256 | 512 = 256) => `/characters/${id}/avatar-${s}.webp`,
+  /**
+   * A story pose. `front` is the exception and has no file here: it is the
+   * Full view above, reused rather than built twice. <@/lib/story> is what
+   * knows that, so nothing else has to.
+   */
+  pose: (id: string, key: string, h: 1600 | 3200, ext: "webp" | "avif" = "webp") =>
+    `/characters/${id}/pose-${key}-${h}.${ext}`,
 };
 
-/** `#RRGGBB` -> `rgba(r, g, b, a)`, so accent colours can carry an alpha. */
-export function accentRgba(hex: string, alpha: number): string {
+/** `#RGB` or `#RRGGBB` -> `[r, g, b]`. */
+function channels(hex: string): [number, number, number] {
   const h = hex.replace("#", "");
   const n = parseInt(
     h.length === 3
@@ -301,5 +396,42 @@ export function accentRgba(hex: string, alpha: number): string {
       : h,
     16,
   );
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+/** `#RRGGBB` -> `rgba(r, g, b, a)`, so accent colours can carry an alpha. */
+export function accentRgba(hex: string, alpha: number): string {
+  const [r, g, b] = channels(hex);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/** Multiplies every channel down. `amount` is 0 (unchanged) to 1 (black). */
+export function darken(hex: string, amount: number, alpha = 1): string {
+  const [r, g, b] = channels(hex).map((v) => Math.round(v * (1 - amount)));
+  return alpha === 1 ? `rgb(${r}, ${g}, ${b})` : `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/**
+ * The darkest stop in a name gradient, by perceived luminance rather than
+ * position -- Reina's runs light to dark and everyone else's does not, so the
+ * extrusion cannot just take the last one.
+ */
+export function deepestStop(stops: readonly string[]): string {
+  const lum = (hex: string) => {
+    const [r, g, b] = channels(hex);
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  return stops.reduce((a, b) => (lum(b) < lum(a) ? b : a));
+}
+
+/**
+ * A name gradient as a CSS stop list. Three stops get the middle one pinned
+ * past centre; four or more are spaced evenly.
+ */
+export function nameStops(stops: readonly string[]): string {
+  const at =
+    stops.length === 3
+      ? [0, NAME.deepStopAt, 100]
+      : stops.map((_, i) => (i / (stops.length - 1)) * 100);
+  return stops.map((c, i) => `${c} ${at[i]}%`).join(", ");
 }
